@@ -1,22 +1,17 @@
-import archiver from "archiver";
-import fs from "fs";
+import express from "express";
+import archive from "./archive.js";
 
-const output = fs.createWriteStream("ddd.zip");
-output.on("error", console.error);
-output.on("finish", () => console.log("done writing"));
-const archive = archiver("zip");
-const streams = [fs.createReadStream("aaa.txt"), fs.createReadStream("bbb.txt"), fs.createReadStream("ccc.txt")];
+const app = express();
 
-streams.forEach((y, i) => {
-    archive.append(y, { name: `name${i}.txt` });
+app.get("/", (req, res) => {
+    res.setHeader("Content-Disposition", "attachment; filename=ddd.zip");
+    res.setHeader("Content-Transfer-Encoding", "binary");
+    res.setHeader("Content-Type", "application/octet-stream");
+    archive().pipe(res);
+    res.on("finish", () => console.log("done sending zip"));
 });
 
-archive.on("finish", () => console.log("done archiving"));
-
-archive
-    .finalize()
-    .then(() => console.log("done finalizing"))
-    .catch(console.error);
-
-archive.pipe(output);
-export {};
+app.listen(3000, () => {
+    console.log("running on port 3000");
+});
+export default app;
