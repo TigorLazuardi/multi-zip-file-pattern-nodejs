@@ -1,3 +1,4 @@
+import archiver from "archiver";
 import "dotenv/config.js";
 import minio from "minio";
 
@@ -9,18 +10,50 @@ const client = new minio.Client({
     useSSL: false,
 });
 
-const listStream = client.listObjects(process.env.MINIO_BUCKET);
+const bucket = process.env.MINIO_BUCKET;
 
-const names = [];
+export default async function getFiles() {
+    const archive = archiver("zip", { zlib: { level: 9 } });
 
-listStream.on("data", (item) => {
-    names.push(item.name);
-});
+    archive.on("error", console.error);
 
-listStream.on("end", () => {
-    console.log(names);
-});
+    const names = await getNames();
 
-listStream.on("error", console.error);
+    const promises = names.map((x) => objs(x));
 
-export {};
+    const files = await Promise.all(promises);
+
+    files.forEach((stream, i) => archive.append(stream, { name: names[i] }));
+
+    archive.on("end", () => {
+        console.log("minio: done archiving");
+    });
+    archive.finalize();
+    return archive;
+}
+
+function getNames() {
+    return new Promise((resolve, reject) => {
+        const result = [];
+        const listStream = client.listObjects(process.env.MINIO_BUCKET);
+
+        listStream.on("data", (item) => {
+            result.push(item.name);
+        });
+
+        listStream.on("end", () => {
+            resolve(result);
+        });
+
+        listStream.on("error", reject);
+    });
+}
+
+function objs(name) {
+    return new Promise((resolve, reject) => {
+        client.getObject(bucket, name, (err, file) => {
+            if (err) return reject(err);
+            resolve(file);
+        });
+    });
+}
